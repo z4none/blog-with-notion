@@ -41,7 +41,6 @@ uv.lock
 *.swo
 *~
 
-
 # OS
 .DS_Store
 .DS_Store?
