@@ -39,7 +39,7 @@ class BlogSyncer:
             if not posts:
                 print("[OK] 没有找到文章")
                 return True
-            
+
             # 显示同步概览
             self._show_sync_summary(posts)
             
@@ -53,6 +53,8 @@ class BlogSyncer:
             return True
             
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             print(f"[ERROR] 同步失败: {e}")
             return False
     

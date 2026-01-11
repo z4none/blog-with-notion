@@ -137,7 +137,7 @@ class NotionClient:
             for page in results:
                 post = NotionPost(page)
                 # 检查是否有有效标题（不是默认的无标题文章）
-                if post.title:
+                if post.title and post.title != "·":
                     valid_posts.append(post)
             
             print(f"找到 {len(valid_posts)} 篇文章")
