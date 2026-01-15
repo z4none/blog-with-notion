@@ -1,0 +1,68 @@
+<article class="{{ if .Params.image }}has-image {{ end }}main-article">
+    {{ partial "article/components/header" . }}
+
+    {{ partial "article/components/content" . }}
+
+    {{ partial "article/components/footer" . }}
+</article>
+
+{{ if .Store.Get "hasMermaid" }}
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.esm.min.mjs';
+  
+    // 获取当前主题
+    function getCurrentTheme() {
+      const scheme = document.documentElement.dataset.scheme;
+      return scheme === 'dark' ? 'dark' : 'default';
+    }
+  
+    // 配置初始化
+    const config = {
+      startOnLoad: false, // 改为手动控制，避免自动渲染冲突
+      theme: getCurrentTheme(),
+      securityLevel: 'loose',
+      flowchart: { useMaxWidth: true, htmlLabels: true }
+    };
+  
+    mermaid.initialize(config);
+  
+    // 核心渲染函数
+    const renderMermaid = async () => {
+      const mermaidElements = document.querySelectorAll('.mermaid');
+      
+      for (const [index, element] of mermaidElements.entries()) {
+        // 1. 备份原始源码：如果是第一次运行，从 textContent 取；否则从 dataset 取
+        if (!element.dataset.source) {
+          element.dataset.source = element.textContent.trim();
+        }
+        
+        const source = element.dataset.source;
+        const id = `mermaid-svg-${index}-${Date.now()}`;
+  
+        try {
+          // 2. 清空容器并准备重绘
+          element.textContent = ''; 
+          const { svg } = await mermaid.render(id, source);
+          element.innerHTML = svg;
+        } catch (error) {
+          console.error('Mermaid 渲染失败:', error);
+          element.innerHTML = `<pre style="color:red;">渲染错误: ${error.message}</pre>`;
+        }
+      }
+    };
+  
+    // 首次加载渲染
+    window.addEventListener('DOMContentLoaded', renderMermaid);
+  
+    // 监听主题切换
+    window.addEventListener('onColorSchemeChange', () => {
+      // 重新初始化主题配置
+      mermaid.initialize({
+        ...config,
+        theme: getCurrentTheme()
+      });
+      // 重新渲染
+      renderMermaid();
+    });
+  </script>
+{{ end }}

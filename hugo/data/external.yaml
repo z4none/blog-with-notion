@@ -42,3 +42,9 @@ Cactus:
     - src: https://latest.cactus.chat/style.css
       integrity:
       type: style
+
+Mermaid:
+    - src: https://fastly.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js
+      integrity: sha384-0yfqJN8qVk5e2cE4/g5W8ZP3K6G5qAMi4M7cA5Fk7S6p6y7pxM4y3dyZ3UyXFw3L
+      type: script
+      defer: true

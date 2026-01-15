@@ -31,6 +31,7 @@ params:
     customText: "-"
   article:
     math: false
+    mermaid: true
     toc: true
     readingTime: false
     license:
@@ -96,9 +97,22 @@ markup:
   goldmark:
     renderer:
       unsafe: true
+    extensions:
+      passthrough:
+        enable: true
+        delimiters:
+          block:
+            - - \[
+              - \]
+            - - $$
+              - $$
+          inline:
+            - - \(
+              - \)
   highlight:
     style: dracula
     lineNos: true
+    noClasses: false
   tableOfContents:
     startLevel: 1
     endLevel: 3
