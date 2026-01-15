@@ -48,10 +48,20 @@ params:
       theme: 'photon-dark'
       crossorigin: 'anonymous'
   widgets:
+    homepage:
+      - type: search
+      - type: archives
+      - type: categories
+      - type: tag-cloud
 
     page: 
       - type: toc      
         params: {}          
+
+    list:
+      - type: archives
+      - type: categories
+      - type: tag-cloud          
 
 # 菜单
 menu:

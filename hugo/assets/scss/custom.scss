@@ -119,3 +119,16 @@ mark {
     padding: 2px;
     border-radius: 4px;
 }
+
+/* Increase article image height */
+.article-list article .article-image img {
+    height: 250px;
+
+    @include respond(md) {
+        height: 300px;
+    }
+
+    @include respond(xl) {
+        height: 350px;
+    }
+}
