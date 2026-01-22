@@ -7,5 +7,15 @@
 {{- end -}}
 
 {{/* 加载项目页面专项样式 */}}
+{{/* 加载项目页面 Styles */}}
+{{- if or (eq .Params.type "projects") (eq .Params.type "project") -}}
 {{- $projectsStyle := resources.Get "css/projects.css" | minify | fingerprint -}}
 <link rel="stylesheet" href="{{ $projectsStyle.RelPermalink }}" integrity="{{ $projectsStyle.Data.Integrity }}">
+{{- end -}}
+
+{{/* 加载项目详情页专用 Styles */}}
+{{- if eq .Params.type "project" -}}
+{{- $projectDetailStyle := resources.Get "css/project-detail.css" | minify | fingerprint -}}
+<link rel="stylesheet" href="{{ $projectDetailStyle.RelPermalink }}"
+    integrity="{{ $projectDetailStyle.Data.Integrity }}">
+{{- end -}}
