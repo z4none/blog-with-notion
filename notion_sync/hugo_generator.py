@@ -528,6 +528,7 @@ title: "我的博客"
         frontmatter = {
             "title": "项目展示",
             "layout": "projects",
+            "type": "projects",
             "menu": {
                 "main": {
                     "name": "项目",

@@ -1,5 +1,6 @@
 ---
 layout: projects
+type: projects
 title: 项目展示
 ---
 
