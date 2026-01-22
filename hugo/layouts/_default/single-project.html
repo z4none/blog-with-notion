@@ -1,0 +1,25 @@
+{{ define "body-class" }}
+article-page without-right-sidebar
+{{ end }}
+
+{{ define "main" }}
+{{ partial "article/article.html" . }}
+
+{{ if .Params.links }}
+{{ partial "article/components/links" . }}
+{{ end }}
+
+{{ partial "article/components/related-content" . }}
+
+{{ if not (eq .Params.comments false) }}
+{{ partial "comments/include" . }}
+{{ end }}
+
+{{ partialCached "footer/footer" . }}
+
+{{ partialCached "article/components/photoswipe" . }}
+{{ end }}
+
+{{ define "right-sidebar" }}
+<!-- No right sidebar for projects -->
+{{ end }}

@@ -5,3 +5,7 @@
 {{- if and $umamiScript $umamiWebsiteId -}}
 <script defer src="{{ $umamiScript }}" data-website-id="{{ $umamiWebsiteId }}"></script>
 {{- end -}}
+
+{{/* 加载项目页面专项样式 */}}
+{{- $projectsStyle := resources.Get "css/projects.css" | minify | fingerprint -}}
+<link rel="stylesheet" href="{{ $projectsStyle.RelPermalink }}" integrity="{{ $projectsStyle.Data.Integrity }}">

@@ -1,0 +1,55 @@
+{{ define "body-class" }}
+projects-page
+{{ end }}
+
+{{ define "main" }}
+<div class="projects-container">
+    <header class="projects-header">
+        {{ if .Params.description }}
+        <p class="projects-description">{{ .Params.description }}</p>
+        {{ end }}
+    </header>
+
+    <!-- 项目过滤器 -->
+    <div class="projects-filter">
+        <!-- Project Type Filter -->
+        <div class="filter-group" style="margin-bottom: 1.5rem;">
+            <label class="filter-label">项目类型：</label>
+            <div class="tech-filter-buttons" id="type-filters">
+                <!-- Dynamically populated -->
+            </div>
+        </div>
+
+        <div class="filter-group">
+            <label class="filter-label">技术栈：</label>
+            <div class="tech-filter-buttons" id="tech-filters">
+                <!-- 动态生成 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 项目网格 -->
+    <div class="projects-grid" id="projects-grid">
+        {{ $projects := where .Site.RegularPages "Params.type" "Project" }}
+        {{ range $projects }}
+        {{ partial "projects/project-card" . }}
+        {{ end }}
+    </div>
+
+    <!-- 空状态 -->
+    <div class="empty-state" id="empty-state" style="display: none;">
+        <div class="empty-icon">📁</div>
+        <h3>暂无项目</h3>
+        <p>没有找到符合筛选条件的项目</p>
+    </div>
+
+    <!-- Projects Script -->
+    <script src="/js/projects.js?v=2"></script>
+</div>
+
+{{ partialCached "footer/footer" . }}
+{{ end }}
+
+{{ define "right-sidebar" }}
+<!-- No right sidebar for projects -->
+{{ end }}

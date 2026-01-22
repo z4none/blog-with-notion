@@ -1,0 +1,75 @@
+{{ $projectData := . }}
+{{ if .Params }}{{ $projectData = .Params }}{{ end }}
+{{ $title := .Title | default $projectData.title }}
+{{ $slug := .Slug | default $projectData.slug }}
+{{ $projectType := .Params.project_type | default $projectData.project_type }}
+
+<article class="project-card" data-status="{{ $projectData.status | default " active" }}"
+    data-project-type="{{ $projectType | default " 其他" }}">
+    <div class="project-card-inner">
+        <!-- 项目图片区域 -->
+        <div class="project-image-container">
+            {{ $cover := .Params.cover | default "/project-default.png" }}
+            {{ if $slug }}
+            <a href="/projects/{{ $slug }}/" class="project-image-link" aria-label="{{ $title }}">
+                <img src="{{ $cover }}" alt="{{ $title }}" loading="lazy" />
+                <div class="project-overlay"></div>
+            </a>
+            {{ else }}
+            <img src="{{ $cover }}" alt="{{ $title }}" loading="lazy" />
+            <div class="project-overlay"></div>
+            {{ end }}
+        </div>
+
+        <!-- 项目内容区域 -->
+        <div class="project-content">
+            <div class="project-header-row">
+                {{ if $projectType }}
+                <div class="project-type-label">{{ $projectType | upper }}</div>
+                {{ end }}
+                {{ if $projectData.github }}
+                <a href="{{ $projectData.github }}" class="project-github-icon" target="_blank" rel="noopener"
+                    title="View on GitHub" aria-label="GitHub">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path
+                            d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22">
+                        </path>
+                    </svg>
+                </a>
+                {{ end }}
+            </div>
+
+
+            <div class="project-header-row">
+                <h3 class="project-title">
+                    {{ if $slug }}
+                    <a href="/projects/{{ $slug }}/">{{ $title }}</a>
+                    {{ else }}
+                    {{ $title }}
+                    {{ end }}
+                </h3>
+
+
+            </div>
+
+            {{ if .Params.tags }}
+            <div class="project-tags">
+                {{ range .Params.tags }}
+                <span class="project-tag-badge">{{ . }}</span>
+                {{ end }}
+            </div>
+            {{ end }}
+
+            {{ if $projectData.description }}
+            <p class="project-description">{{ $projectData.description }}</p>
+            {{ end }}
+
+            <div class="project-footer">
+                {{ if $slug }}
+                <a href="/projects/{{ $slug }}/" class="read-more-btn">Read more</a>
+                {{ end }}
+            </div>
+        </div>
+    </div>
+</article>

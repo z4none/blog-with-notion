@@ -25,6 +25,7 @@ class NotionConfig(BaseModel):
     """Notion API 配置"""
     token: str = Field(..., description="Notion API token")
     database_id: str = Field(..., description="Notion database ID")
+    proxy_url: Optional[str] = Field(None, description="代理服务器 URL，如 http://127.0.0.1:7890")
     
     @classmethod
     def from_env(cls) -> "NotionConfig":
@@ -32,6 +33,7 @@ class NotionConfig(BaseModel):
         return cls(
             token=os.getenv("NOTION_TOKEN", ""),
             database_id=os.getenv("NOTION_DATABASE_ID", ""),
+            proxy_url=os.getenv("NOTION_PROXY", None),
         )
 
 

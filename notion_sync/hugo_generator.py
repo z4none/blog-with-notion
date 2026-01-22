@@ -6,6 +6,7 @@ Hugo 内容生成器
 import asyncio
 import httpx
 import re
+import yaml
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -13,7 +14,7 @@ import frontmatter
 from pydantic import BaseModel
 
 from .config import HugoConfig
-from .notion_client import NotionPost, NotionClient
+from .notion_client import NotionPost, NotionClient, NotionProject
 
 
 class HugoGenerator:
@@ -42,20 +43,24 @@ class HugoGenerator:
                 print(f"处理第 {i}/{len(posts)} 篇: {post.title}")
                 
                 # 获取文章内容
-                content = await notion_client.get_page_content(post.id)
+                content = notion_client.get_page_content(post.id)
                 
                 # 生成文件
-                await self._generate_post_file(post, content)
+                self._generate_post_file(post, content)
                 generated_count += 1
                 
             except Exception as e:
                 print(f"[ERROR] 生成失败 {post.title}: {e}")
         
+        # TODO: 临时禁用项目集合页面生成，先专注于基本同步
+        # self._generate_projects_pages(posts, notion_client)
+        print("[INFO] Project pages generation temporarily disabled")
+        
         print(f"文章生成完成，共 {generated_count} 篇")
-        await self.http_client.aclose()
+        # self.http_client.aclose()  # 不需要关闭，因为它可能是同步的客户端
         return generated_count
         
-    async def _download_cover_image(self, image_url: str, post_slug: str) -> str:
+    def _download_cover_image(self, image_url: str, post_slug: str) -> str:
         """Download cover image and return relative path"""
         try:
             # Extract image ID for consistent naming
@@ -74,26 +79,29 @@ class HugoGenerator:
             filename = f"{post_slug}-{image_id}{ext}"
             local_path = self.images_dir / filename
             
-            async with self.http_client.stream("GET", image_url) as response:
-                response.raise_for_status()
-                with open(local_path, "wb") as f:
-                    async for chunk in response.aiter_bytes():
-                        f.write(chunk)
+            # Use synchronous download
+            import httpx
+            response = httpx.get(image_url, follow_redirects=True, timeout=30)
+            response.raise_for_status()
+            
+            with open(local_path, "wb") as f:
+                for chunk in response.iter_bytes(chunk_size=8192):
+                    f.write(chunk)
             
             return f"/images/{filename}"
         except Exception as e:
             print(f"[ERROR] Failed to download cover image: {e}")
             raise
 
-    async def _generate_post_file(self, post: NotionPost, content: str):
+    def _generate_post_file(self, post: NotionPost, content: str):
         """生成单篇文章"""
         # 处理内容中的图片
-        processed_content = await self._process_images(content, post.slug)
+        processed_content = self._process_images(content, post.slug)
 
         cover_path = None
         if post.cover_url:
             try:
-                cover_path = await self._download_cover_image(post.cover_url, post.slug)
+                cover_path = self._download_cover_image(post.cover_url, post.slug)
             except Exception as e:
                 print(f"[WARNING] Failed to download cover image: {e}")
         
@@ -110,6 +118,21 @@ class HugoGenerator:
             "notion_id": post.id,
             "type": post.post_type,
         }
+        
+        # 添加项目特定属性
+        if post.is_project():
+            if post.project_status:
+                front_matter["status"] = post.project_status
+            if post.technologies:
+                front_matter["technologies"] = post.technologies
+            if post.project_period:
+                front_matter["period"] = post.project_period
+            if post.github_url:
+                front_matter["github"] = post.github_url
+            if post.demo_url:
+                front_matter["demo"] = post.demo_url
+            if post.project_category:
+                front_matter["category"] = post.project_category
 
         if cover_path:
             front_matter["image"] = cover_path
@@ -117,10 +140,22 @@ class HugoGenerator:
         # 创建 post 对象
         post_obj = frontmatter.Post(processed_content, **front_matter)
         
-        # 根据文章类型选择目录
+        # 根据文章类型选择目录和布局
         if post.is_page():
-            # Page 类型直接放在 content 目录下
-            filepath = self.config.pages_dir / f"{post.slug}.md"
+            if post.post_type == "project":
+                # 独立项目页面
+                front_matter["layout"] = "single-project"
+                # 创建 projects 子目录
+                projects_dir = self.config.pages_dir / "projects"
+                projects_dir.mkdir(parents=True, exist_ok=True)
+                filepath = projects_dir / f"{post.slug}.md"
+            elif post.post_type == "projects":
+                # 项目集合页面
+                front_matter["layout"] = "projects"
+                filepath = self.config.pages_dir / f"{post.slug}.md"
+            else:
+                # 普通 Page 类型直接放在 content 目录下
+                filepath = self.config.pages_dir / f"{post.slug}.md"
         else:
             # Post 类型放在 posts 目录下
             filepath = self.config.content_dir / f"{post.slug}.md"
@@ -131,12 +166,12 @@ class HugoGenerator:
         
         print(f"[OK] 生成文章: {filepath.name}")
     
-    async def _process_images(self, content: str, post_slug: str) -> str:
-        """处理文章中的图片"""
+    def _process_images(self, content: str, post_slug: str) -> str:
+        """处理文章中的图片（简化同步版本）"""
         # 匹配 Markdown 图片语法
         image_pattern = r'!\[([^\]]*)\]\(([^)]+)\)'
         
-        async def download_and_replace(match):
+        def download_and_replace(match):
             alt_text = match.group(1)
             image_url = match.group(2)
             
@@ -155,8 +190,9 @@ class HugoGenerator:
                     print(f"[OK] 使用已存在的图片: {existing_file.name}")
                     return f"![{alt_text}]({relative_path})"
                 
-                # 下载图片
-                response = await self.http_client.get(image_url)
+                # 使用 httpx 下载图片
+                import httpx
+                response = httpx.get(image_url, timeout=30, follow_redirects=True)
                 response.raise_for_status()
                 
                 # 获取文件扩展名
@@ -188,18 +224,16 @@ class HugoGenerator:
                 print(f"[WARNING] 下载图片失败 {image_url}: {e}")
                 return match.group(0)
         
-        # 使用异步处理所有图片
-        tasks = []
-        for match in re.finditer(image_pattern, content):
-            tasks.append(download_and_replace(match))
+        # 处理所有图片
+        processed_content = content
+        matches = list(re.finditer(image_pattern, content))
         
-        if tasks:
-            results = await asyncio.gather(*tasks)
-            # 替换原内容中的图片链接
-            for i, match in enumerate(re.finditer(image_pattern, content)):
-                content = content.replace(match.group(0), results[i], 1)
+        # 从后往前替换，避免位置偏移问题
+        for match in reversed(matches):
+            replacement = download_and_replace(match)
+            processed_content = processed_content.replace(match.group(0), replacement, 1)
         
-        return content
+        return processed_content
     
     def _extract_notion_image_id(self, image_url: str) -> str:
         """从 Notion 图片 URL 中提取稳定的文件 ID"""
@@ -327,6 +361,117 @@ class HugoGenerator:
         else:
             print("[OK] 没有无用图片需要清理")
     
+    async def _generate_projects_pages(self, posts: List[NotionPost], notion_client: NotionClient):
+        """生成项目相关页面"""
+        # 找到项目集合页面
+        projects_pages = [post for post in posts if post.is_projects_page()]
+        
+        for projects_page in projects_pages:
+            print(f"处理项目集合页面: {projects_page.title}")
+            
+            # 获取页面内容
+            content = notion_client.get_page_content(projects_page.id)
+            
+            # 如果页面有关联的数据库，从数据库获取项目
+            if projects_page.database_id:
+                print(f"从数据库获取项目数据...")
+                project_posts = notion_client.get_database_pages(projects_page.database_id)
+                
+                # 生成项目数据
+                projects_data = []
+                for project in project_posts:
+                    project_data = {
+                        "title": project.title,
+                        "description": project.description,
+                        "status": project.project_status,
+                        "technologies": project.technologies,
+                        "period": project.project_period,
+                        "category": project.project_category,
+                        "github": project.github_url,
+                        "demo": project.demo_url,
+                        "cover": project.cover_url,
+                        "slug": project.slug
+                    }
+                    projects_data.append(project_data)
+                
+                # 在内容中注入项目数据
+                projects_yaml = f"projects:\n"
+                for i, project in enumerate(projects_data):
+                    projects_yaml += f"  - title: {project['title']}\n"
+                    if project['description']:
+                        projects_yaml += f"    description: \"{project['description']}\"\n"
+                    if project['status']:
+                        projects_yaml += f"    status: {project['status']}\n"
+                    if project['technologies']:
+                        projects_yaml += f"    technologies: [{', '.join(project['technologies'])}]\n"
+                    if project['period']:
+                        projects_yaml += f"    period: {project['period']}\n"
+                    if project['category']:
+                        projects_yaml += f"    category: {project['category']}\n"
+                    if project['github']:
+                        projects_yaml += f"    github: {project['github']}\n"
+                    if project['demo']:
+                        projects_yaml += f"    demo: {project['demo']}\n"
+                    if project['cover']:
+                        projects_yaml += f"    cover: {project['cover']}\n"
+                    if project['slug']:
+                        projects_yaml += f"    slug: {project['slug']}\n"
+                    if i < len(projects_data) - 1:
+                        projects_yaml += "\n"
+                
+                # 在页面内容前添加 YAML 前置数据
+                full_content = f"---\ntitle: \"{projects_page.title}\"\ntype: \"projects\"\ndescription: \"{projects_page.description}\"\n{projects_yaml}\n---\n\n{content}"
+                
+            else:
+                # 没有关联数据库，使用普通页面处理
+                full_content = content
+            
+            # 生成文件
+            self._generate_projects_page_file(projects_page, full_content)
+    
+    def _generate_projects_page_file(self, post: NotionPost, content: str):
+        """生成项目集合页面文件"""
+        # 处理内容中的图片
+        processed_content = self._process_images(content, post.slug)
+
+        cover_path = None
+        if post.cover_url:
+            try:
+                cover_path = self._download_cover_image(post.cover_url, post.slug)
+            except Exception as e:
+                print(f"[WARNING] Failed to download cover image: {e}")
+        
+        # 创建 front matter（如果内容中还没有的话）
+        if not content.startswith('---'):
+            front_matter = {
+                "title": post.title,
+                "date": post.date,
+                "lastmod": post.last_edited_time.split("T")[0],
+                "slug": post.slug,
+                "draft": not post.is_published(),
+                "notion_id": post.id,
+                "type": "projects",
+                "description": post.excerpt,
+            }
+
+            if cover_path:
+                front_matter["image"] = cover_path
+            
+            # 创建 post 对象
+            post_obj = frontmatter.Post(processed_content, **front_matter)
+        else:
+            # 内容已经包含前置数据，直接使用
+            post_obj = frontmatter.loads(processed_content)
+        
+        # 项目集合页面放在 pages 目录下
+        filepath = self.config.pages_dir / f"{post.slug}.md"
+        
+        # 写入文件
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(frontmatter.dumps(post_obj))
+        
+        print(f"[OK] 生成项目集合页面: {filepath.name}")
+    
     def generate_index(self):
         """生成首页（可选）"""
         index_content = """---
@@ -342,3 +487,245 @@ title: "我的博客"
         index_path = self.config.content_dir.parent / "_index.md"
         with open(index_path, "w", encoding="utf-8") as f:
             f.write(index_content)
+    
+    async def generate_projects(self, projects: List[NotionProject], notion_client: NotionClient) -> int:
+        """生成 Hugo 项目页面"""
+        generated_count = 0
+        
+        print(f"开始生成 {len(projects)} 个项目...")
+        
+        # 创建项目目录
+        projects_dir = self.config.pages_dir / "projects"
+        projects_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 生成项目集合页
+        self._generate_projects_collection_page(projects)
+        
+        # 生成各个项目详情页
+        for i, project in enumerate(projects, 1):
+            try:
+                print(f"处理第 {i}/{len(projects)} 个项目: {project.title}")
+                
+                # 获取项目内容（如果有）
+                content = notion_client.get_page_content(project.id)
+                
+                # 生成项目文件
+                self._generate_project_file(project, content, projects_dir)
+                generated_count += 1
+                
+            except Exception as e:
+                print(f"生成项目 {project.title} 失败: {e}")
+                continue
+        
+        # 生成项目数据文件
+        self._generate_projects_data(projects)
+        
+        print(f"[OK] 生成了 {generated_count} 个项目页面")
+        return generated_count
+    
+    def _generate_projects_collection_page(self, projects: List[NotionProject]):
+        """生成项目集合页面"""
+        frontmatter = {
+            "title": "项目展示",
+            "layout": "projects",
+            "menu": {
+                "main": {
+                    "name": "项目",
+                    "weight": 20
+                }
+            }
+        }
+        
+        content = f"""# 我的项目
+
+这里展示了我开发的一些项目作品。
+
+"""
+        
+        # 按分类组织项目
+        categories = {}
+        for project in projects:
+            category = project.category or "其他"
+            if category not in categories:
+                categories[category] = []
+            categories[category].append(project)
+        
+        for category, category_projects in categories.items():
+            content += f"## {category}\n\n"
+            for project in category_projects:
+                content += f"- **[{project.title}]({project.slug}/)**: {project.description}\n"
+                if project.technologies:
+                    content += f"  - 技术栈: {', '.join(project.technologies)}\n"
+                if project.github_url:
+                    content += f"  - [GitHub]({project.github_url})\n"
+                if project.demo_url:
+                    content += f"  - [在线演示]({project.demo_url})\n"
+                content += "\n"
+        
+        # 写入文件
+        # Use _index.md in projects directory to act as section index
+        filepath = self.config.pages_dir / "projects" / "_index.md"
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(f"---\n{yaml.dump(frontmatter, allow_unicode=True, default_flow_style=False)}---\n\n{content}")
+        
+        print(f"[OK] 生成项目集合页面: {filepath.name}")
+    
+    def _generate_project_file(self, project: NotionProject, content: str, projects_dir: Path):
+        """生成单个项目文件"""
+        frontmatter = {
+            "title": project.title,
+            "description": project.description,
+            "status": project.status,
+            "type": "Project",  # Explicitly set type for filtering
+            "project_type": project.project_type,
+            # "technologies": project.technologies,  # Removed as per request
+            "tags": project.tags,
+            "slug": project.slug,
+            "layout": "single-project", # Use custom layout
+            "category": project.category,
+            "date": project.date
+        }
+        
+        # 添加可选字段
+        if project.github_url:
+            frontmatter["github"] = project.github_url
+        if project.demo_url:
+            frontmatter["demo"] = project.demo_url
+        if project.period:
+            frontmatter["period"] = project.period
+        if project.cover_url:
+            # 下载封面图片
+            local_cover = self._download_project_cover(project.cover_url, project.slug)
+            if local_cover:
+                frontmatter["cover"] = local_cover
+                frontmatter["image"] = local_cover  # For SEO/OpenGraph
+        
+        # 处理内容中的图片
+        processed_content = self._process_project_images(content, project.slug)
+        
+        # 写入文件
+        filepath = projects_dir / f"{project.slug}.md"
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(f"---\n{yaml.dump(frontmatter, allow_unicode=True, default_flow_style=False)}---\n\n{processed_content}")
+        
+        print(f"[OK] 生成项目文件: {filepath.name}")
+    
+    def _download_project_cover(self, image_url: str, project_slug: str) -> Optional[str]:
+        """下载项目封面图片"""
+        if not image_url:
+            return None
+            
+        try:
+            # 生成文件名
+            image_id = self._extract_notion_image_id(image_url)
+            if not image_id:
+                image_id = f"{project_slug}-cover"
+                
+            ext = "jpg"  # 默认扩展名
+            filename = f"{image_id}.{ext}"
+            filepath = self.images_dir / "projects" / filename
+            filepath.parent.mkdir(parents=True, exist_ok=True)
+            
+            # 下载图片
+            # Use sync httpx.get instead of async client
+            response = httpx.get(image_url, follow_redirects=True)
+            if response.status_code == 200:
+                with open(filepath, "wb") as f:
+                    f.write(response.content)
+                return f"/images/projects/{filename}"
+            else:
+                print(f"下载封面图片失败: {response.status_code}")
+                return None
+                
+        except Exception as e:
+            print(f"下载封面图片时出错: {e}")
+            return None
+    
+    def _process_project_images(self, content: str, project_slug: str) -> str:
+        """处理项目内容中的图片"""
+        if not content:
+            return ""
+            
+        def download_and_replace(match):
+            image_url = match.group(2)
+            if not image_url:
+                return match.group(0)
+            
+            # 检查是否为 Notion 图片
+            if "files.notion.so" not in image_url:
+                return match.group(0)  # 保留外部链接
+            
+            # 下载图片
+            local_path = self._download_project_image(image_url, project_slug)
+            if local_path:
+                return f"![image]({local_path})"
+            else:
+                return match.group(0)
+        
+        # 处理所有图片
+        content = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', download_and_replace, content)
+        return content
+    
+    def _download_project_image(self, image_url: str, project_slug: str) -> Optional[str]:
+        """下载项目内容中的图片"""
+        try:
+            image_id = self._extract_notion_image_id(image_url)
+            if not image_id:
+                image_id = f"{project_slug}-{hash(image_url) % 10000}"
+                
+            ext = "jpg"
+            filename = f"{image_id}.{ext}"
+            filepath = self.images_dir / "projects" / filename
+            filepath.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Use sync httpx.get instead of async client
+            import httpx
+            response = httpx.get(image_url, follow_redirects=True)
+            if response.status_code == 200:
+                with open(filepath, "wb") as f:
+                    f.write(response.content)
+                return f"/images/projects/{filename}"
+            return None
+            
+        except Exception as e:
+            print(f"下载项目图片时出错: {e}")
+            return None
+    
+    def _generate_projects_data(self, projects: List[NotionProject]):
+        """生成项目数据文件（JSON格式）"""
+        import json
+        
+        # 创建数据目录
+        data_dir = self.config.content_dir.parent / "data"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 转换为字典格式
+        projects_data = [project.to_dict() for project in projects]
+        
+        # 写入 JSON 文件
+        filepath = data_dir / "projects.json"
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(projects_data, f, ensure_ascii=False, indent=2)
+        
+        print(f"[OK] 生成项目数据文件: {filepath.name}")
+    
+    def clean_old_projects(self, current_projects: List[NotionProject]):
+        """清理旧的项目文件"""
+        projects_dir = self.config.content_dir / "projects"
+        if not projects_dir.exists():
+            return
+        
+        current_slugs = {project.slug for project in current_projects}
+        
+        # 删除不再存在的项目文件
+        for filepath in projects_dir.glob("*.md"):
+            slug = filepath.stem
+            if slug not in current_slugs:
+                filepath.unlink()
+                print(f"删除旧项目文件: {filepath.name}")
+    
+    async def close(self):
+        """关闭 HTTP 客户端"""
+        await self.http_client.aclose()
