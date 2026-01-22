@@ -59,6 +59,9 @@ hugo/hugo_stats.json
 # Notion Sync
 hugo/assets
 !hugo/assets/scss/custom.scss
+!hugo/assets/css/projects.css
+!hugo/assets/css/project-detail.css
+!hugo/assets/ts/projects.ts
 hugo/content
 hugo/static/images/*
 
