@@ -650,18 +650,19 @@ title: "我的博客"
             return ""
             
         def download_and_replace(match):
+            alt_text = match.group(1)
             image_url = match.group(2)
             if not image_url:
                 return match.group(0)
             
-            # 检查是否为 Notion 图片
-            if "files.notion.so" not in image_url:
-                return match.group(0)  # 保留外部链接
+            # 仅仅检查是否为 HTTP(S) 链接
+            if not image_url.startswith(("http://", "https://")):
+                return match.group(0)
             
             # 下载图片
             local_path = self._download_project_image(image_url, project_slug)
             if local_path:
-                return f"![image]({local_path})"
+                return f"![{alt_text}]({local_path})"
             else:
                 return match.group(0)
         
@@ -674,12 +675,18 @@ title: "我的博客"
         try:
             image_id = self._extract_notion_image_id(image_url)
             if not image_id:
-                image_id = f"{project_slug}-{hash(image_url) % 10000}"
+                # 使用 hashlib 生成稳定 ID
+                import hashlib
+                image_id = f"{project_slug}-{hashlib.md5(image_url.encode()).hexdigest()[:8]}"
                 
             ext = "jpg"
             filename = f"{image_id}.{ext}"
             filepath = self.images_dir / "projects" / filename
             filepath.parent.mkdir(parents=True, exist_ok=True)
+            
+            # 如果文件已存在，直接返回
+            if filepath.exists():
+                return f"/images/projects/{filename}"
             
             # Use sync httpx.get instead of async client
             import httpx
